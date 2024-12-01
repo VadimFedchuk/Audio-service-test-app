@@ -1,36 +1,72 @@
 package com.example.audiobooktestapplication.util
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.ServiceConnection
+import android.os.IBinder
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.example.audiobooktestapplication.service.AudioPlayerService
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import javax.inject.Inject
 
 class AudioPlayerInteractor @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
 
-    private var audioPlayerService: AudioPlayerService? = null
-    private var isBound = false
+    private val _serviceReady = MutableStateFlow(false)
+    private val serviceReady: StateFlow<Boolean> = _serviceReady.asStateFlow()
 
-    private val _currentPosition = MutableStateFlow<Long>(0L)
-    val currentPosition: StateFlow<Long> = _currentPosition
-
-    fun setCurrentPosition(position: Long) {
-        _currentPosition.value = position
+    val positionFlow: Flow<Long> = serviceReady.flatMapLatest { ready ->
+        if (ready) {
+            audioPlayerService?.currentPosition ?: flowOf(0L)
+        } else {
+            flowOf(0L)
+        }
     }
 
-    fun playAudio(audioResId: Int) {
+    private var audioPlayerService: AudioPlayerService? = null
+
+    private val serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            Log.i("TestDebug", "Service connected")
+            val binder = service as? AudioPlayerService.LocalBinder
+            audioPlayerService = binder?.getService()
+            _serviceReady.value = true
+            Log.i("TestDebug", "Service connected, audioPlayerService: $audioPlayerService")
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            audioPlayerService = null
+            _serviceReady.value = false
+        }
+    }
+
+    private fun bindService() {
+        val intent = Intent(context, AudioPlayerService::class.java)
+        context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+    }
+
+    fun unbindService() {
+        if (serviceReady.value) {
+            context.unbindService(serviceConnection)
+            _serviceReady.value = false
+        }
+    }
+
+    fun playAudio() {
         val intent = Intent(context, AudioPlayerService::class.java).apply {
             action = AudioPlayerService.ACTION_PLAY
-            putExtra(AudioPlayerService.EXTRA_AUDIO_RES_ID, audioResId)
         }
         ContextCompat.startForegroundService(context, intent)
-        Log.i("TestDebug", "play 1")
+        bindService()
     }
 
     fun pauseAudio() {
@@ -38,7 +74,6 @@ class AudioPlayerInteractor @Inject constructor(
             action = AudioPlayerService.ACTION_PAUSE
         }
         context.startService(intent)
-        Log.i("TestDebug", "play 2")
     }
 
     fun seekTo(time: Long) {
@@ -53,6 +88,21 @@ class AudioPlayerInteractor @Inject constructor(
         val intent = Intent(context, AudioPlayerService::class.java).apply {
             action = AudioPlayerService.ACTION_CHANGE_SPEED
             putExtra(AudioPlayerService.EXTRA_SPEED, speed)
+        }
+        context.startService(intent)
+    }
+
+    fun stopAudio() {
+        val intent = Intent(context, AudioPlayerService::class.java).apply {
+            action = AudioPlayerService.ACTION_STOP
+        }
+        context.startService(intent)
+    }
+
+    fun initMediaPlayer(audioResId: Int) {
+        val intent = Intent(context, AudioPlayerService::class.java).apply {
+            action = AudioPlayerService.ACTION_INIT
+            putExtra(AudioPlayerService.EXTRA_AUDIO_RES_ID, audioResId)
         }
         context.startService(intent)
     }

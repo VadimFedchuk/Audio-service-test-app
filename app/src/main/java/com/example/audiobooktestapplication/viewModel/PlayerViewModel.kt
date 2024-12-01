@@ -1,6 +1,5 @@
 package com.example.audiobooktestapplication.viewModel
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.audiobooktestapplication.R
@@ -32,6 +31,7 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             val data = getFileNameUseCase()
             _state.value = data.toPlayerScreenState()
+            audioPlayerInteractor.initMediaPlayer(R.raw.audiobook)
         }
     }
 
@@ -80,10 +80,8 @@ class PlayerViewModel @Inject constructor(
 
     private fun togglePlayPause() {
         val currentState = state.value
-        Log.i("TestDebug", "togglePlayPause")
         if (currentState is PlayerScreenState.Success) {
             val isPlaying = currentState.currentBook.isPlaying
-            Log.i("TestDebug", "togglePlayPause $isPlaying")
             _state.value = currentState.copy(
                 currentBook = currentState.currentBook.copy(
                     isPlaying = !isPlaying
@@ -92,7 +90,8 @@ class PlayerViewModel @Inject constructor(
             if (isPlaying) {
                 audioPlayerInteractor.pauseAudio()
             } else {
-                audioPlayerInteractor.playAudio(R.raw.audiobook)
+                audioPlayerInteractor.playAudio()
+                observeCurrentPosition()
             }
         }
     }
@@ -172,5 +171,30 @@ class PlayerViewModel @Inject constructor(
             )
             audioPlayerInteractor.changePlaybackSpeed(speed)
         }
+    }
+
+    private fun observeCurrentPosition() {
+        viewModelScope.launch {
+            audioPlayerInteractor.positionFlow.collect { position ->
+                val currentState = state.value
+                if (currentState is PlayerScreenState.Success) {
+                    _state.value = currentState.copy(
+                        currentBook = currentState.currentBook.copy(
+                            currentTime = position
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    fun closeService() {
+        audioPlayerInteractor.stopAudio()
+        audioPlayerInteractor.unbindService()
+    }
+
+    override fun onCleared() {
+        closeService()
+        super.onCleared()
     }
 }

@@ -19,6 +19,9 @@ import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    private lateinit var viewModel: PlayerViewModel
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -32,7 +35,7 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(paddingValues)
                     ) {
                         composable(route = "playerScreen") {
-                            val viewModel = hiltViewModel<PlayerViewModel>()
+                            viewModel = hiltViewModel<PlayerViewModel>()
                             val state = viewModel.state.collectAsState().value
                             PlayerScreen(
                                 state = state,
@@ -43,5 +46,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        if (::viewModel.isInitialized) {
+            viewModel.closeService()
+        }
+        super.onDestroy()
     }
 }

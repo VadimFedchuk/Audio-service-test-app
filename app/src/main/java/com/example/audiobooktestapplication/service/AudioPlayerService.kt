@@ -11,16 +11,22 @@ import android.media.PlaybackParams
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.audiobooktestapplication.R
-import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
-@AndroidEntryPoint
 class AudioPlayerService : Service() {
 
     private var mediaPlayer: MediaPlayer? = null
     private var playbackSpeed: Float = 1f
+
+    private val _currentPosition = MutableStateFlow(0L)
+    val currentPosition: StateFlow<Long> = _currentPosition
 
     private val binder = LocalBinder()
 
@@ -32,45 +38,41 @@ class AudioPlayerService : Service() {
         return binder
     }
 
-    fun getCurrentPosition(): Long {
-        return mediaPlayer?.currentPosition?.toLong() ?: 0L
-    }
-
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
-        Log.i("TestDebug", "onStartCommand $action")
         when (action) {
-            ACTION_PLAY -> {
+            ACTION_INIT -> {
                 val audioResId = intent.getIntExtra(EXTRA_AUDIO_RES_ID, -1)
-                if (audioResId != -1) playAudio(audioResId)
+                if (audioResId != -1) initMediaPlayer(audioResId)
+            }
+            ACTION_PLAY -> {
+                playAudio()
             }
             ACTION_PAUSE -> pauseAudio()
             ACTION_SEEK_TO -> {
                 val newTime = intent.getIntExtra(EXTRA_SEEK_POSITION, -1)
-                Log.i("TestDebug", "onStartCommand $newTime")
                 if (newTime != -1) seekTo(newTime)
             }
             ACTION_CHANGE_SPEED -> changeSpeed(intent.getFloatExtra(EXTRA_SPEED, 1f))
+            ACTION_STOP -> stopAudio()
         }
 
         return START_STICKY
     }
 
-    private fun playAudio(audioResId: Int) {
-        if (mediaPlayer == null) {
-            mediaPlayer = MediaPlayer.create(this, audioResId).apply {
-                start()
-                setPlaybackSpeed(playbackSpeed)
-            }
-        } else {
-            mediaPlayer?.start()
-        }
-
+    private fun initMediaPlayer(audioResId: Int) {
+        mediaPlayer = MediaPlayer.create(this, audioResId)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, createNotification(), FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
         } else {
             startForeground(NOTIFICATION_ID, createNotification())
         }
+    }
+
+    private fun playAudio() {
+        mediaPlayer?.start()
+        mediaPlayer?.setPlaybackSpeed(playbackSpeed)
+        startTrackingCurrentPosition()
     }
 
     private fun seekTo(newTime: Int) {
@@ -81,18 +83,17 @@ class AudioPlayerService : Service() {
         }
     }
 
-    private fun rewindAudio() {
-        mediaPlayer?.let {
-            val newTime = (it.currentPosition - REWIND_TIME).coerceAtLeast(0)
-            it.seekTo(newTime)
+    private fun startTrackingCurrentPosition() {
+        CoroutineScope(Dispatchers.IO).launch {
+            while (mediaPlayer?.isPlaying == true) {
+                _currentPosition.value = mediaPlayer?.currentPosition?.toLong() ?: 0L
+                delay(100)
+            }
         }
     }
 
-    private fun forwardAudio() {
-        mediaPlayer?.let {
-            val newTime = (it.currentPosition + FORWARD_TIME).coerceAtMost(it.duration)
-            it.seekTo(newTime)
-        }
+    private fun stopTrackingCurrentPosition() {
+        _currentPosition.value = 0L
     }
 
     private fun changeSpeed(speed: Float) {
@@ -112,6 +113,7 @@ class AudioPlayerService : Service() {
     }
 
     private fun stopAudio() {
+        stopTrackingCurrentPosition()
         mediaPlayer?.stop()
         mediaPlayer?.release()
         mediaPlayer = null
@@ -148,16 +150,15 @@ class AudioPlayerService : Service() {
     }
 
     companion object {
+        const val ACTION_INIT = "ACTION_INIT"
         const val ACTION_PLAY = "ACTION_PLAY"
         const val ACTION_PAUSE = "ACTION_PAUSE"
+        const val ACTION_STOP = "ACTION_STOP"
         const val ACTION_SEEK_TO = "ACTION_SEEK_TO"
         const val ACTION_CHANGE_SPEED = "ACTION_CHANGE_SPEED"
         const val EXTRA_AUDIO_RES_ID = "EXTRA_AUDIO_RES_ID"
         const val EXTRA_SEEK_POSITION = "EXTRA_AUDIO_POSITION"
         const val EXTRA_SPEED = "EXTRA_SPEED"
-
-        const val REWIND_TIME = 10_000 // 10 seconds
-        const val FORWARD_TIME = 10_000 // 10 seconds
         const val NOTIFICATION_ID = 1
     }
 }
