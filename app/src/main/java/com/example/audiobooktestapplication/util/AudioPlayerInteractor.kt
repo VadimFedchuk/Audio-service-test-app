@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.IBinder
-import android.util.Log
 import androidx.core.content.ContextCompat
 import com.example.audiobooktestapplication.service.AudioPlayerService
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -36,11 +35,9 @@ class AudioPlayerInteractor @Inject constructor(
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            Log.i("TestDebug", "Service connected")
             val binder = service as? AudioPlayerService.LocalBinder
             audioPlayerService = binder?.getService()
             _serviceReady.value = true
-            Log.i("TestDebug", "Service connected, audioPlayerService: $audioPlayerService")
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
