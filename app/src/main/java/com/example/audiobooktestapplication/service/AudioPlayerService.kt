@@ -17,6 +17,7 @@ import com.example.audiobooktestapplication.MainActivity
 import com.example.audiobooktestapplication.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +32,8 @@ class AudioPlayerService : Service() {
     val currentPosition: StateFlow<Long> = _currentPosition
 
     private val binder = LocalBinder()
+
+    private var timerJob: Job? = null
 
     inner class LocalBinder : Binder() {
         fun getService(): AudioPlayerService = this@AudioPlayerService
@@ -86,7 +89,8 @@ class AudioPlayerService : Service() {
     }
 
     private fun startTrackingCurrentPosition() {
-        CoroutineScope(Dispatchers.IO).launch {
+        timerJob?.cancel()
+        timerJob = CoroutineScope(Dispatchers.IO).launch {
             while (mediaPlayer?.isPlaying == true) {
                 _currentPosition.value = mediaPlayer?.currentPosition?.toLong() ?: 0L
                 delay(100)
@@ -95,6 +99,8 @@ class AudioPlayerService : Service() {
     }
 
     private fun stopTrackingCurrentPosition() {
+        timerJob?.cancel()
+        timerJob = null
         _currentPosition.value = 0L
     }
 
@@ -158,6 +164,7 @@ class AudioPlayerService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        stopTrackingCurrentPosition()
         mediaPlayer?.release()
         mediaPlayer = null
     }
