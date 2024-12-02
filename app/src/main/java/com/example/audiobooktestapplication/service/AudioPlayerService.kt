@@ -3,6 +3,7 @@ package com.example.audiobooktestapplication.service
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
@@ -12,6 +13,7 @@ import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import com.example.audiobooktestapplication.MainActivity
 import com.example.audiobooktestapplication.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -134,11 +136,22 @@ class AudioPlayerService : Service() {
             manager.createNotificationChannel(notificationChannel)
         }
 
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0, // requestCode
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val notificationBuilder = NotificationCompat.Builder(this, notificationChannelId)
             .setContentTitle("Audio Player")
             .setContentText("Playing your audio")
             .setSmallIcon(R.drawable.ic_music_note)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setContentIntent(pendingIntent)
 
         return notificationBuilder.build()
     }
